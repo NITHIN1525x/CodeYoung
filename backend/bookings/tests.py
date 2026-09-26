@@ -58,11 +58,27 @@ class ModelValidationTests(TestCase):
 
 
 class MentorModelTests(TestCase):
-    def test_seed_command_creates_ten_india_mentors_idempotently(self):
+    def test_seed_command_creates_ten_multi_timezone_mentors_idempotently(self):
         from django.core.management import call_command
 
         call_command("seed_mentors", verbosity=0)
-        self.assertEqual(Mentor.objects.count(), 10)
-        self.assertEqual(Mentor.objects.filter(timezone="Asia/Kolkata", country="India", active=True).count(), 10)
+        mentors = list(Mentor.objects.filter(active=True).order_by("name"))
+        self.assertEqual(len(mentors), 10)
+        self.assertGreaterEqual(len({mentor.timezone for mentor in mentors}), 7)
+        expected = {
+            ("India", "Karnataka", "Mangalore", "Asia/Kolkata"),
+            ("India", "Maharashtra", "Mumbai", "Asia/Kolkata"),
+            ("United Kingdom", "England", "London", "Europe/London"),
+            ("United States", "New York", "New York City", "America/New_York"),
+            ("United States", "Illinois", "Chicago", "America/Chicago"),
+            ("United States", "Colorado", "Denver", "America/Denver"),
+            ("United States", "California", "Los Angeles", "America/Los_Angeles"),
+            ("Australia", "New South Wales", "Sydney", "Australia/Sydney"),
+            ("Singapore", "Singapore", "Singapore", "Asia/Singapore"),
+            ("Japan", "Tokyo", "Tokyo", "Asia/Tokyo"),
+        }
+        actual = {(m.country, m.state_region, m.city, m.timezone) for m in mentors}
+        self.assertEqual(actual, expected)
         call_command("seed_mentors", verbosity=0)
-        self.assertEqual(Mentor.objects.count(), 10)
+        self.assertEqual(Mentor.objects.filter(active=True).count(), 10)
+        self.assertEqual({m.timezone for m in Mentor.objects.filter(active=True)}, {row[3] for row in expected})

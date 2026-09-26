@@ -4,12 +4,14 @@ A full-stack trial-class booking app. Parents choose a date and time in their ow
 
 ## Features
 
-- Parent booking flow with browser timezone detection and editable location details.
+- Parent booking flow with a browser timezone suggestion, cascading continent/country/region/city selection, and city-derived IANA timezone.
 - Automatic mentor assignment, availability checks, and a two-classes-per-mentor-local-day limit.
-- Timezone and daylight-saving-aware appointment displays.
+- Ten seeded mentors across India, the UK, the US, Australia, Singapore, and Japan, each scheduled in their own IANA timezone.
+- Timezone and daylight-saving-aware availability, appointment displays, and local-day capacity.
 - Email notifications and a delivery outbox (SMTP configuration is optional for local setup).
 - Demo class page at `/class/<meeting_id>`, mentor view at `/mentor`, and staff pages at `/debug` and `/outbox`.
 - PostgreSQL-backed idempotency and concurrent booking protection.
+- Parent-support chat with a structured local FAQ and a timezone-aware demo callback request.
 
 ## Technology
 
@@ -88,6 +90,8 @@ On Windows, use `Set-Location frontend` in PowerShell instead of `cd` if preferr
 
 To send real email, configure the SMTP variables in `backend/.env`. For Gmail, use `smtp.gmail.com`, port `587`, TLS enabled, and a Google App Password. Set `DEMO_MENTOR_EMAIL` to a deliverable inbox and rerun `python manage.py seed_mentors` if you want the demo mentor's notifications delivered to that inbox. Never put passwords in source files or commit them. Without SMTP, bookings still succeed, but email delivery may be marked failed; use Django's console email backend for local message previews.
 
+The callback form stores a demo request for staff review; it does not place a real phone call or send a callback email.
+
 ## Tests and production build
 
 With PostgreSQL running and the backend virtual environment active:
@@ -97,16 +101,19 @@ cd backend
 python manage.py test
 ```
 
-Reuse the test database with `python manage.py test --keepdb`. Build the frontend with:
+Reuse the test database with `python manage.py test --keepdb`. Run the frontend FAQ tests and production build with:
 
 ```sh
 cd frontend
+npm test
 npm run build
 ```
 
+Support endpoints include `GET /api/health/` (configured trial duration), `POST /api/support/callbacks/` (create a demo callback request), and staff-only `GET /api/admin/support-callbacks/`.
+
 ## Timezone and capacity rules
 
-Appointments are stored canonically in UTC and converted to the relevant IANA timezone for display. DST gaps are rejected; repeated local times are disambiguated. A mentor's maximum two demo classes per day is calculated according to the mentor's local calendar day and resets at the mentor's local midnight.
+The parent confirms a suggested location or selects continent, country, region, and city; the selected city determines the canonical IANA timezone. Browser timezone detection identifies a timezone but is presented as a location suggestion because it cannot identify the parent’s exact city. Seeded mentors cover India, the UK, the US, Australia, Singapore, and Japan. Appointments are stored canonically in UTC and converted to each parent’s and assigned mentor’s IANA timezone for display and email. DST gaps are rejected; repeated local times are disambiguated. A mentor's maximum two demo classes per day is calculated according to the assigned mentor's local calendar day and resets at that mentor's local midnight. Staff can inspect today’s per-mentor local date, timezone, count, and capacity on the debug dashboard.
 
 ## Project layout
 

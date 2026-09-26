@@ -34,7 +34,10 @@ export default function DemoClassPage({ meetingId }) {
           <h1>Demo Class</h1>
           <p className="demo-class-notice">This is a demo meeting. No video or microphone connection is required.</p>
           <div className="demo-class-details">
-            <div><span>Mentor</span><strong>{details.mentor.name}</strong></div>
+            <div><span>Mentor</span><strong>{details.mentor.name}</strong>
+              {details.mentor.location && <small>{details.mentor.location.city === 'Not specified'
+                ? 'Location not specified'
+                : Object.values(details.mentor.location).join(' → ')}</small>}</div>
             <div><span>Appointment status</span><strong>{details.status}</strong></div>
             <div><span>Your local date and time</span><strong>{details.parent_time.local_date}</strong><strong>{details.parent_time.local_time}</strong><small>{details.parent_time.timezone}</small></div>
             <div><span>Mentor’s local date and time</span><strong>{details.mentor.local_date}</strong><strong>{details.mentor.local_time}</strong><small>{details.mentor.timezone}</small></div>

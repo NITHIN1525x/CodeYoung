@@ -16,6 +16,7 @@ from bookings.services.creation import (
     serialize_booking,
 )
 from mentors.models import Mentor
+from mentors.services.capacity import get_mentor_local_daily_capacity
 from mentors.services.availability import get_available_slots
 from notifications.models import EmailOutbox
 
@@ -81,6 +82,12 @@ def mentor_bookings_view(request):
 def admin_bookings_view(request):
     appointments = Appointment.objects.select_related("parent", "mentor").order_by("-created_at")
     return Response([serialize_booking(appointment) for appointment in appointments])
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_mentor_capacity_view(request):
+    return Response(get_mentor_local_daily_capacity())
 
 
 @api_view(["GET"])
@@ -178,12 +185,28 @@ def demo_class_view(request, meeting_id):
         "duration_minutes": int((appointment.end_time_utc - appointment.start_time_utc).total_seconds() // 60),
         "mentor": {
             "name": appointment.mentor.name,
+            "continent": appointment.mentor.continent,
+            "country": appointment.mentor.country,
+            "state_region": appointment.mentor.state_region,
+            "city": appointment.mentor.city,
+            "location": {
+                "continent": appointment.mentor.continent,
+                "country": appointment.mentor.country,
+                "state_region": appointment.mentor.state_region,
+                "city": appointment.mentor.city,
+            },
             "timezone": appointment.mentor.timezone,
             "local_date": mentor_local.strftime("%A, %B %d, %Y"),
             "local_time": format_local_datetime(appointment.start_time_utc, appointment.mentor.timezone),
         },
         "parent_time": {
             "timezone": appointment.parent.timezone,
+            "location": {
+                "continent": appointment.parent.continent,
+                "country": appointment.parent.country,
+                "state_region": appointment.parent.state_region,
+                "city": appointment.parent.city,
+            },
             "local_date": parent_local.strftime("%A, %B %d, %Y"),
             "local_time": format_local_datetime(appointment.start_time_utc, appointment.parent.timezone),
         },

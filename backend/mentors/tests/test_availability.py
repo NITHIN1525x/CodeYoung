@@ -76,6 +76,45 @@ class AvailabilityTests(SimpleTestCase):
         self.assertTrue(slots)
         self.assertTrue(all(slot["available_mentor_count"] == 1 for slot in slots))
 
+    def test_mentor_local_daily_limit_uses_mentor_date_not_parent_date(self):
+        mentor = SimpleNamespace(
+            pk=8, active=True, timezone="Asia/Kolkata",
+            working_hours={"2": {"start": "00:00", "end": "02:00"}},
+        )
+        # Both existing classes are Tuesday for the India mentor but Monday for the
+        # New York parent. The Monday parent date must still consume Tuesday capacity.
+        existing_one = self.appointment(8, datetime(2026, 4, 13, 19, 0, tzinfo=timezone.utc))
+        existing_two = self.appointment(8, datetime(2026, 4, 13, 19, 30, tzinfo=timezone.utc))
+        slots = compute_available_slots(
+            date(2026, 4, 13), "America/New_York", [mentor], [existing_one, existing_two],
+            now=datetime(2026, 4, 13, 18, 0, tzinfo=timezone.utc),
+        )
+        next_day_in_mentor_zone = [
+            slot for slot in slots
+            if slot["start_time_utc"] == "2026-04-13T18:30:00+00:00"
+        ]
+        self.assertEqual(len(next_day_in_mentor_zone), 1)
+        self.assertEqual(next_day_in_mentor_zone[0]["available_mentor_count"], 0)
+        self.assertEqual(next_day_in_mentor_zone[0]["parent_local_display"], "2:30 PM EDT")
+        self.assertEqual(next_day_in_mentor_zone[0]["mentor_local_time"], "12:00 AM IST")
+
+    def test_available_slots_show_local_times_for_each_eligible_timezone(self):
+        london = SimpleNamespace(
+            pk=11, active=True, timezone="Europe/London",
+            working_hours={"5": {"start": "12:00", "end": "14:00"}},
+        )
+        india = SimpleNamespace(
+            pk=12, active=True, timezone="Asia/Kolkata",
+            working_hours={"5": {"start": "17:00", "end": "19:00"}},
+        )
+        slots = compute_available_slots(
+            self.friday, "America/New_York", [london, india],
+            now=datetime(2026, 4, 10, 11, 0, tzinfo=timezone.utc),
+        )
+        target = next(slot for slot in slots if slot["start_time_utc"] == "2026-04-10T12:00:00+00:00")
+        self.assertEqual(target["available_mentor_count"], 2)
+        self.assertEqual(target["mentor_local_times"], ["1:00 PM BST (Europe/London)", "5:30 PM IST (Asia/Kolkata)"])
+
     def test_fall_back_hour_generates_both_distinct_utc_slots(self):
         mentor = SimpleNamespace(
             pk=3, active=True, timezone="America/New_York",

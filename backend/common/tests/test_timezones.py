@@ -27,6 +27,18 @@ class TimezoneConversionTests(SimpleTestCase):
         self.assertEqual(format_local_datetime(instant, "Asia/Kolkata"), "5:30 PM IST")
         self.assertEqual(local_datetime_to_utc(datetime(2026, 4, 10, 8), "America/New_York"), instant)
 
+    def test_same_utc_slot_renders_for_new_york_london_and_kolkata_parents(self):
+        instant = datetime(2026, 4, 10, 12, tzinfo=timezone.utc)
+        expected = {
+            "America/New_York": "8:00 AM EDT",
+            "Europe/London": "1:00 PM BST",
+            "Asia/Kolkata": "5:30 PM IST",
+        }
+        for zone, local_display in expected.items():
+            with self.subTest(timezone=zone):
+                self.assertEqual(format_local_datetime(instant, zone), local_display)
+                self.assertEqual(utc_to_local(instant, zone).astimezone(timezone.utc), instant)
+
     def test_spring_forward_gap_is_rejected(self):
         nonexistent = datetime(2026, 3, 8, 2, 30)
         self.assertEqual(local_datetime_candidates(nonexistent, "America/New_York"), [])
@@ -45,6 +57,22 @@ class TimezoneConversionTests(SimpleTestCase):
         self.assertEqual(second - first, timedelta(hours=1))
         self.assertEqual(format_local_datetime(first, "America/New_York"), "1:30 AM EDT")
         self.assertEqual(format_local_datetime(second, "America/New_York"), "1:30 AM EST")
+
+    def test_local_day_boundaries_follow_dst_for_all_seeded_dst_regions(self):
+        transitions = {
+            "America/New_York": (date(2026, 3, 8), date(2026, 11, 1)),
+            "America/Chicago": (date(2026, 3, 8), date(2026, 11, 1)),
+            "America/Denver": (date(2026, 3, 8), date(2026, 11, 1)),
+            "America/Los_Angeles": (date(2026, 3, 8), date(2026, 11, 1)),
+            "Europe/London": (date(2026, 3, 29), date(2026, 10, 25)),
+            "Australia/Sydney": (date(2026, 10, 4), date(2026, 4, 5)),
+        }
+        for zone, (spring_day, fall_day) in transitions.items():
+            with self.subTest(timezone=zone):
+                spring_start, spring_end = local_day_bounds_utc(spring_day, zone)
+                fall_start, fall_end = local_day_bounds_utc(fall_day, zone)
+                self.assertEqual(spring_end - spring_start, timedelta(hours=23))
+                self.assertEqual(fall_end - fall_start, timedelta(hours=25))
 
     def test_local_day_bounds_follow_dst_not_fixed_utc_duration(self):
         spring_start, spring_end = local_day_bounds_utc(date(2026, 3, 8), "America/New_York")

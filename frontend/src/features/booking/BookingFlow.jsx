@@ -1,21 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { createBooking, getAvailability, getBooking } from '../../shared/api/client.js'
 import BookingConfirmation from './components/BookingConfirmation.jsx'
+import { createBookingPayload } from './bookingPayload.js'
 import BookingForm from './components/BookingForm.jsx'
 import DateSelector, { formatSelectedDate } from './components/DateSelector.jsx'
 import ErrorState from './components/ErrorState.jsx'
 import LoadingState from './components/LoadingState.jsx'
 import SlotList from './components/SlotList.jsx'
-import { canonicalTimezone, isValidTimezone, locationFromTimezone } from './locationData.js'
-
-function browserTimezone() {
-  try {
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-    return isValidTimezone(timezone) ? canonicalTimezone(timezone) : ''
-  } catch {
-    return ''
-  }
-}
+import { detectBrowserTimezone, isValidTimezone } from './locationData.js'
 
 function newIdempotencyKey() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
@@ -28,16 +20,17 @@ function nextRoute(path, state = {}) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-const emptyParent = (timezone) => ({
-  name: '', email: '', ...locationFromTimezone(timezone), timezone,
+const emptyParent = () => ({
+  name: '', email: '', continent: '', country: '', state_region: '', city: '', timezone: '',
 })
 
 export default function BookingFlow() {
-  const detectedTimezone = useRef(browserTimezone()).current
+  const [detection, setDetection] = useState({ state: 'loading', timezone: '' })
+  const detectedTimezone = detection.timezone
   const [route, setRoute] = useState(() => window.location.pathname)
   const [stage, setStage] = useState(1)
-  const [parent, setParent] = useState(() => emptyParent(detectedTimezone))
-  const [timezoneValid, setTimezoneValid] = useState(() => isValidTimezone(detectedTimezone))
+  const [parent, setParent] = useState(emptyParent)
+  const [timezoneValid, setTimezoneValid] = useState(false)
   const [selectedDate, setSelectedDate] = useState('')
   const [slots, setSlots] = useState([])
   const [availabilityState, setAvailabilityState] = useState('idle')
@@ -50,6 +43,14 @@ export default function BookingFlow() {
   const [confirmationRetry, setConfirmationRetry] = useState(0)
   const submitLock = useRef(false)
   const idempotencyKey = useRef('')
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const timezone = detectBrowserTimezone()
+      setDetection({ state: timezone ? 'detected' : 'failed', timezone })
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     const onPopState = () => setRoute(window.location.pathname)
@@ -125,12 +126,7 @@ export default function BookingFlow() {
     setSubmitError('')
     if (!idempotencyKey.current) idempotencyKey.current = newIdempotencyKey()
 
-    const payload = {
-      ...parent,
-      selected_date: selectedSlot.parent_local_time.slice(0, 10),
-      selected_time: selectedSlot.parent_local_time.slice(11, 16),
-      fold: selectedSlot.fold,
-    }
+    const payload = createBookingPayload(parent, selectedSlot)
     try {
       const booking = await createBooking(payload, idempotencyKey.current)
       setConfirmation(booking)
@@ -150,8 +146,8 @@ export default function BookingFlow() {
 
   const startOver = () => {
     setConfirmation(null)
-    setParent(emptyParent(detectedTimezone))
-    setTimezoneValid(isValidTimezone(detectedTimezone))
+    setParent(emptyParent())
+    setTimezoneValid(false)
     setSelectedDate('')
     setSlots([])
     setSelectedSlot(null)
@@ -218,7 +214,7 @@ export default function BookingFlow() {
         <section className="booking-card" aria-live="polite">
           {stage === 1 && <BookingForm values={parent} onChange={changeParent}
             onContinue={() => setStage(2)} detectedTimezone={detectedTimezone}
-            timezoneValid={timezoneValid} onTimezoneValidityChange={setTimezoneValid} />}
+            detectionState={detection.state} timezoneValid={timezoneValid} />}
 
           {stage === 2 && (
             <form onSubmit={(event) => { event.preventDefault(); setStage(3) }}>

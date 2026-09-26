@@ -12,7 +12,7 @@ class Mentor(models.Model):
     country = models.CharField(max_length=100)
     state_region = models.CharField(max_length=100)
     city = models.CharField(max_length=100)
-    timezone = models.CharField(max_length=64, default="Asia/Kolkata", validators=[validate_iana_timezone])
+    timezone = models.CharField(max_length=64, validators=[validate_iana_timezone])
     # ISO weekdays (1=Monday..7=Sunday) map to mentor-local start/end time strings.
     working_hours = models.JSONField(default=dict)
     active = models.BooleanField(default=True, db_index=True)

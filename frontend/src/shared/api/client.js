@@ -47,6 +47,13 @@ export function getMentorBookings(mentorId, { signal } = {}) {
 export function getAdminBookings({ signal } = {}) {
   return request('/api/admin/bookings/', { signal })
 }
+export function getAdminMentorCapacity({ signal } = {}) {
+  return request('/api/admin/mentor-capacity/', { signal })
+}
 export function getEmailOutbox({ signal } = {}) {
   return request('/api/admin/email-outbox/', { signal })
 }
+export const createSupportCallback = (requestData) => request('/api/support/callbacks/', {
+  method: 'POST',
+  body: JSON.stringify(requestData),
+})

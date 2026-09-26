@@ -11,5 +11,6 @@ urlpatterns = [
     path("mentors/<int:mentor_id>/bookings/", views.mentor_dashboard_bookings_view, name="mentor-dashboard-bookings"),
     path("mentor/bookings/", views.mentor_bookings_view, name="mentor-bookings"),
     path("admin/bookings/", views.admin_bookings_view, name="admin-bookings"),
+    path("admin/mentor-capacity/", views.admin_mentor_capacity_view, name="admin-mentor-capacity"),
     path("admin/email-outbox/", views.admin_outbox_view, name="admin-email-outbox"),
 ]

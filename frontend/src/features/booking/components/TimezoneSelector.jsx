@@ -1,30 +1,22 @@
-import { canonicalTimezone, isValidTimezone, timezoneSummary } from '../locationData.js'
+import { availableIanaTimezones, friendlyTimezoneName, isValidTimezone } from '../locationData.js'
 
-export default function TimezoneSelector({ value, onChange, detectedTimezone, onValidityChange }) {
+const timezones = availableIanaTimezones()
+
+export default function TimezoneSelector({ value, onChange }) {
   const valid = isValidTimezone(value)
-  const detected = Boolean(detectedTimezone && isValidTimezone(detectedTimezone))
-  const summary = timezoneSummary(value)
-
   return (
-    <div className="field-group timezone-field">
-      <div className="timezone-detected-card" aria-live="polite">
-        <span className="detected-badge">{detected ? 'Location detected' : 'Set your location'}</span>
-        {valid ? (
-          <p><strong>Timezone:</strong> {value} <span>({summary})</span></p>
-        ) : (
-          <p className="field-error">We couldn’t detect a timezone. Enter a city above to set it.</p>
-        )}
+    <details className="timezone-override">
+      <summary>Can’t find your location? Select timezone manually</summary>
+      <div className="field-group">
+        <label htmlFor="timezone-fallback">Timezone</label>
+        <select id="timezone-fallback" value={valid ? value : ''} onChange={(event) => onChange(event.target.value)}>
+          <option value="">Choose a timezone</option>
+          {timezones.map((timezone) => (
+            <option key={timezone} value={timezone}>{friendlyTimezoneName(timezone)} · {timezone}</option>
+          ))}
+        </select>
+        <span className="field-hint">Choose your local timezone. This list is only needed when your city is not available.</span>
       </div>
-      <details className="timezone-override">
-        <summary>Timezone incorrect? Enter an IANA timezone</summary>
-        <label htmlFor="parent-timezone">Timezone name</label>
-        <input id="parent-timezone" type="text" value={value} placeholder="e.g. America/New_York"
-          onChange={(event) => { const timezone = canonicalTimezone(event.target.value.trim()); onChange(timezone); onValidityChange(isValidTimezone(timezone)) }}
-          aria-describedby="timezone-help" aria-invalid={!valid} />
-        <span id="timezone-help" className={valid ? 'field-hint' : 'field-error'}>
-          {valid ? 'Use an IANA name such as America/New_York, Europe/London, or Asia/Kolkata.' : 'Enter a valid IANA timezone name.'}
-        </span>
-      </details>
-    </div>
+    </details>
   )
 }

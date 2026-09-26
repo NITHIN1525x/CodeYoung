@@ -216,6 +216,12 @@ def create_booking(data: dict, idempotency_key: str) -> tuple[Appointment, bool]
         mentor_local = format_local_datetime(start_utc, mentor.timezone)
         parent_local_date = utc_to_local(start_utc, parent.timezone).strftime("%A, %B %d, %Y")
         mentor_local_date = utc_to_local(start_utc, mentor.timezone).strftime("%A, %B %d, %Y")
+        parent_location = (
+            "Location not specified"
+            if parent.city == "Not specified"
+            else f"{parent.continent} → {parent.country} → {parent.state_region} → {parent.city}"
+        )
+        mentor_location = f"{mentor.continent} → {mentor.country} → {mentor.state_region} → {mentor.city}"
         parent_email = EmailOutbox.objects.create(
             appointment=appointment,
             recipient=parent.email,
@@ -225,8 +231,10 @@ def create_booking(data: dict, idempotency_key: str) -> tuple[Appointment, bool]
                 f"Your CodeYoung Trial Class is Confirmed!\n\n"
                 f"Hi {parent.name},\n\n"
                 "Your trial class has been successfully booked.\n\n"
+                f"Your location: {parent_location}\n"
                 f"Your Time: {parent_local_date}, {parent_local}\n"
                 f"Mentor: {mentor.name}\n"
+                f"Mentor location: {mentor_location}\n"
                 f"Mentor's Local Time: {mentor_local_date}, {mentor_local}\n\n"
                 f"Join your trial class:\n{appointment.meeting_link}\n\n"
                 "Please use this link at your scheduled time.\n\n"
@@ -240,7 +248,10 @@ def create_booking(data: dict, idempotency_key: str) -> tuple[Appointment, bool]
             subject="A CodeYoung trial class has been assigned to you",
             body=(
                 f"A CodeYoung trial class has been assigned to you.\n\n"
+                f"Mentor: {mentor.name}\n"
+                f"Your location: {mentor_location}\n"
                 f"Parent: {parent.name} ({parent.email})\n"
+                f"Parent location: {parent_location}\n"
                 f"Trial class: {parent_local_date}, {parent_local} parent local time\n"
                 f"Your local time: {mentor_local_date}, {mentor_local}\n\n"
                 f"Meeting link: {appointment.meeting_link}"

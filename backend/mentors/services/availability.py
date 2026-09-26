@@ -106,6 +106,7 @@ def compute_available_slots(
         utc_end = utc_start + duration
         parent_local = utc_to_local(utc_start, parent_timezone)
         available_count = 0
+        available_timezones = set()
         seen = set()
         for mentor, mentor_day in possible_mentors:
             if mentor.pk in seen:
@@ -125,8 +126,10 @@ def compute_available_slots(
             )
             if daily_count < daily_limit and not has_conflict:
                 available_count += 1
+                available_timezones.add(mentor.timezone)
 
-        display_tz = sorted({m.timezone for m, _ in possible_mentors})[0]
+        possible_timezones = available_timezones or {m.timezone for m, _ in possible_mentors}
+        display_tz = sorted(possible_timezones)[0]
         results.append({
             "start_time_utc": utc_start.isoformat(),
             "end_time_utc": utc_end.isoformat(),
@@ -137,7 +140,7 @@ def compute_available_slots(
             "mentor_timezone": display_tz,
             "mentor_local_times": sorted({
                 f"{format_local_datetime(utc_start, tz)} ({tz})"
-                for tz in {m.timezone for m, _ in possible_mentors}
+                for tz in possible_timezones
             }),
             "available_mentor_count": available_count,
             "available": available_count > 0,

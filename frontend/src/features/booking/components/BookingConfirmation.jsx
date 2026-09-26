@@ -3,6 +3,12 @@ export default function BookingConfirmation({ booking, onStartOver }) {
   const mentorTime = booking.mentor.local_time
   const emailStatus = booking.confirmation_email_status
   const mentorEmailStatus = booking.mentor_email_status
+  const locationLabel = (person) => {
+    const location = person.location ?? person
+    return location.city === 'Not specified'
+      ? 'Location not specified'
+      : [location.continent, location.country, location.state_region, location.city].filter(Boolean).join(' → ')
+  }
   return (
     <main className="confirmation-page">
       <nav className="topbar confirmation-topbar" aria-label="Main navigation">
@@ -16,8 +22,10 @@ export default function BookingConfirmation({ booking, onStartOver }) {
         <p className="step-kicker">TRIAL CLASS CONFIRMED</p>
         <h1>Your class is<br />on the calendar.</h1>
         <div className="confirmation-people">
-          <p><span>Parent</span><strong>{booking.parent.name}</strong></p>
-          <p><span>Mentor</span><strong>{booking.mentor.name}</strong></p>
+          <p><span>Parent</span><strong>{booking.parent.name}</strong>
+            <small>{booking.parent.location ? locationLabel(booking.parent) : ''}</small></p>
+          <p><span>Mentor</span><strong>{booking.mentor.name}</strong>
+            <small>{booking.mentor.location ? locationLabel(booking.mentor) : ''}</small></p>
         </div>
         <div className="confirmation-details">
           <div className="confirmation-time primary-confirmation-time">

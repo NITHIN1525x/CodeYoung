@@ -1,10 +1,21 @@
-import LocationSelector from './LocationSelector.jsx'
-import TimezoneSelector from './TimezoneSelector.jsx'
+import TimezoneSetup from './TimezoneSetup.jsx'
 
-export default function BookingForm({ values, onChange, onContinue, detectedTimezone, timezoneValid, onTimezoneValidityChange }) {
+export default function BookingForm({
+  values,
+  onChange,
+  onContinue,
+  detectedTimezone,
+  detectionState,
+  timezoneValid,
+}) {
   const update = (field) => (event) => onChange({ ...values, [field]: event.target.value })
+  const handleSubmit = (event) => {
+    event.preventDefault()
+    if (timezoneValid) onContinue()
+  }
+
   return (
-    <form className="booking-form" onSubmit={(event) => { event.preventDefault(); onContinue() }}>
+    <form className="booking-form" onSubmit={handleSubmit}>
       <div className="section-heading">
         <span className="step-kicker">STEP 01 · ABOUT YOU</span>
         <h2>Let’s get to know you.</h2>
@@ -20,10 +31,12 @@ export default function BookingForm({ values, onChange, onContinue, detectedTime
           <input id="parent-email" type="email" value={values.email} onChange={update('email')} autoComplete="email" placeholder="you@example.com" maxLength={254} required />
         </div>
       </div>
-      <LocationSelector values={values} onChange={onChange} />
-      <TimezoneSelector value={values.timezone}
-        onChange={(timezone) => onChange({ ...values, timezone })}
-        detectedTimezone={detectedTimezone} onValidityChange={onTimezoneValidityChange} />
+      <TimezoneSetup
+        values={values}
+        onChange={onChange}
+        detectionState={detectionState}
+        detectedTimezone={detectedTimezone}
+      />
       <div className="form-actions">
         <span className="privacy-note"><span aria-hidden="true">⌑</span> Your details stay private.</span>
         <button className="button button-primary" type="submit" disabled={!timezoneValid}>

@@ -113,6 +113,8 @@ class BookingWorkflowTests(TransactionTestCase):
         self.assertTrue(all(appointment.meeting_link in message.body for message in messages))
         self.assertIn("5:00 PM IST", by_type[EmailOutbox.EmailType.BOOKING_CONFIRMATION].body)
         self.assertIn("5:00 PM IST", by_type[EmailOutbox.EmailType.MENTOR_NOTIFICATION].body)
+        self.assertIn("Asia → India → Karnataka → Bengaluru", by_type[EmailOutbox.EmailType.BOOKING_CONFIRMATION].body)
+        self.assertIn("Asia → India → Karnataka → Mangalore", by_type[EmailOutbox.EmailType.MENTOR_NOTIFICATION].body)
 
     def test_mentor_email_failure_does_not_invalidate_booking_or_parent_delivery(self):
         def fail_mentor_email(message, *, fail_silently=False):
@@ -345,11 +347,15 @@ class BookingWorkflowTests(TransactionTestCase):
         self.assertIn(parent_local_date, mentor_mail.body)
         self.assertIn(mentor_local_date, mentor_mail.body)
         self.assertIn("8:00 AM EDT", parent_mail.body)
+        self.assertIn("North America → United States → New York → New York City", parent_mail.body)
+        self.assertIn("Asia → India → Karnataka → Mangalore", parent_mail.body)
         self.assertIn("5:30 PM IST", parent_mail.body)
         self.assertIn("5:30 PM IST", mentor_mail.body)
         self.assertIn("8:00 AM EDT", mentor_mail.body)
         self.assertIn("Nithin", mentor_mail.body)
         self.assertIn("nnitin90430@gmail.com", mentor_mail.body)
+        self.assertIn("Asia → India → Karnataka → Mangalore", mentor_mail.body)
+        self.assertIn("North America → United States → New York → New York City", mentor_mail.body)
         self.assertIn(parent_local_date, mentor_mail.body)
         self.assertIn(mentor_local_date, mentor_mail.body)
         self.assertEqual(response.data["mentor_email_status"], EmailOutbox.Status.SENT)
@@ -385,7 +391,13 @@ class BookingWorkflowTests(TransactionTestCase):
         client.force_authenticate(user=staff)
         admin_view = api_get(client, "/api/admin/bookings/")
         outbox_view = api_get(client, "/api/admin/email-outbox/")
+        capacity_view = api_get(client, "/api/admin/mentor-capacity/")
         self.assertEqual(admin_view.status_code, 200)
+        self.assertEqual(capacity_view.status_code, 200)
+        capacity_row = next(row for row in capacity_view.data if row["id"] == self.mentor.pk)
+        self.assertEqual(capacity_row["timezone"], "Asia/Kolkata")
+        self.assertEqual(capacity_row["classes_today"], 0)
+        self.assertEqual(capacity_row["daily_capacity"], 2)
         self.assertEqual(admin_view.data[0]["id"], appointment.pk)
         self.assertEqual(outbox_view.status_code, 200)
         self.assertEqual(len(outbox_view.data), 2)
@@ -402,6 +414,10 @@ class SeededMentorCapacityTests(TransactionTestCase):
         call_command("seed_mentors", verbosity=0)
         mentors = list(Mentor.objects.filter(active=True).order_by("pk"))
         self.assertEqual(len(mentors), 10)
+        self.assertGreaterEqual(len({mentor.timezone for mentor in mentors}), 7)
+        for mentor in mentors:
+            mentor.working_hours = {str(day): {"start": "00:00", "end": "23:59"} for day in range(1, 8)}
+            mentor.save(update_fields=["working_hours"])
 
         booking_date = date.today() + timedelta(days=1)
         while booking_date.weekday() >= 5:
@@ -410,7 +426,7 @@ class SeededMentorCapacityTests(TransactionTestCase):
         client = APIClient()
         assigned_by_time = []
         booking_number = 0
-        for requested_time in (time(10), time(11)):
+        for requested_time in (time(16, 30), time(17, 0)):
             assigned_for_slot = set()
             for _ in range(10):
                 booking_number += 1
@@ -444,10 +460,16 @@ class SeededMentorCapacityTests(TransactionTestCase):
         for mentor in mentors:
             appointments = list(Appointment.objects.filter(mentor=mentor).select_related("mentor"))
             self.assertEqual(len(appointments), 2)
-            self.assertTrue(all(
-                appointment.start_time_utc.astimezone(ZoneInfo(mentor.timezone)).date() == booking_date
+            by_local_day = {}
+            for appointment in appointments:
+                local_day = appointment.start_time_utc.astimezone(ZoneInfo(mentor.timezone)).date()
+                by_local_day[local_day] = by_local_day.get(local_day, 0) + 1
+            self.assertTrue(all(count <= 2 for count in by_local_day.values()))
+            mentor_days = {
+                appointment.start_time_utc.astimezone(ZoneInfo(mentor.timezone)).date()
                 for appointment in appointments
-            ))
+            }
+            self.assertEqual(mentor_days, {appointments[0].start_time_utc.astimezone(ZoneInfo(mentor.timezone)).date()})
 
         twenty_first = api_post(
             client,
@@ -461,7 +483,7 @@ class SeededMentorCapacityTests(TransactionTestCase):
                 "city": "Bengaluru",
                 "timezone": "Asia/Kolkata",
                 "selected_date": booking_date.isoformat(),
-                "selected_time": "12:00",
+                "selected_time": "17:30",
             },
             format="json",
             HTTP_IDEMPOTENCY_KEY="ten-mentor-capacity-21",
