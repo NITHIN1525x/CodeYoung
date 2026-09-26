@@ -13,7 +13,9 @@ from django.test import TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
 from bookings.models import Appointment, Parent
-from bookings.services.creation import BookingValidationError, IdempotencyConflict, NoAvailableMentor, create_booking
+from bookings.services.creation import (
+    BookingValidationError, IdempotencyConflict, NoAvailableMentor, ParentOverlapConflict, create_booking,
+)
 from common.timezones import local_datetime_to_utc
 from mentors.models import Mentor
 from notifications.models import EmailOutbox
@@ -86,17 +88,47 @@ class BookingWorkflowTests(TransactionTestCase):
             working_hours=self.mentor.working_hours,
         )
 
-    def add_appointment(self, mentor, starts_at, key):
+    def add_appointment(self, mentor, starts_at, key, *, ends_at=None, parent_email=None):
         parent = Parent.objects.create(
-            name=f"Existing {key}", email=f"{key}@example.com",
+            name=f"Existing {key}", email=parent_email or f"{key}@example.com",
             continent="Asia", country="India", state_region="Karnataka",
             city="Bengaluru", timezone="Asia/Kolkata",
         )
         return Appointment.objects.create(
             parent=parent, mentor=mentor, start_time_utc=starts_at,
-            end_time_utc=starts_at + timedelta(minutes=30),
+            end_time_utc=ends_at or starts_at + timedelta(minutes=30),
             meeting_link=f"https://codeyoung.demo/class/test-{key}", idempotency_key=key,
         )
+
+    def assert_api_parent_overlap_conflict(self, key, existing_start, existing_end, requested_time):
+        parent_email = f"{key}@example.com"
+        starts_at = local_datetime_to_utc(
+            datetime.combine(self.booking_date, existing_start), "Asia/Kolkata"
+        )
+        ends_at = local_datetime_to_utc(
+            datetime.combine(self.booking_date, existing_end), "Asia/Kolkata"
+        )
+        existing = self.add_appointment(
+            self.mentor, starts_at, f"existing-{key}", ends_at=ends_at, parent_email=parent_email
+        )
+        payload = {
+            **self.parent_data,
+            "email": parent_email,
+            "selected_time": requested_time.strftime("%H:%M"),
+        }
+        response = api_post(
+            APIClient(), "/api/bookings/", payload, format="json",
+            HTTP_IDEMPOTENCY_KEY=f"overlap-{key}",
+        )
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(
+            response.data["detail"],
+            "You already have a trial class scheduled during this time. Please choose another time.",
+        )
+        self.assertEqual(Appointment.objects.count(), 1)
+        self.assertEqual(EmailOutbox.objects.count(), 0)
+        self.assertEqual(Appointment.objects.filter(mentor=self.mentor).count(), 1)
+        self.assertEqual(existing.parent.email, parent_email)
 
     def test_success_assigns_least_loaded_and_creates_matching_outbox_messages(self):
         less_loaded = self.add_mentor("Ananya Mentor", "ananya.mentor@gmail.com")
@@ -176,6 +208,99 @@ class BookingWorkflowTests(TransactionTestCase):
         self.add_appointment(self.mentor, starts_at, "overlap-existing")
         with self.assertRaises(NoAvailableMentor):
             create_booking(self.parent_data, "overlap-request")
+
+    def test_parent_overlap_patterns_return_conflict_without_creating_booking_or_email(self):
+        overlap_cases = (
+            # Exact same slot.
+            ("exact", time(17), time(17, 30), time(17)),
+            # New appointment starts during existing appointment.
+            ("new-start-inside", time(16, 45), time(17, 15), time(17)),
+            # New appointment ends during existing appointment.
+            ("new-end-inside", time(17, 15), time(17, 45), time(17)),
+            # New appointment completely contains the existing one.
+            ("new-contains", time(17, 10), time(17, 20), time(17)),
+            # Existing appointment completely contains the new one.
+            ("existing-contains", time(16, 30), time(18), time(17)),
+        )
+        for key, existing_start, existing_end, requested_time in overlap_cases:
+            with self.subTest(overlap=key):
+                self.assert_api_parent_overlap_conflict(
+                    key, existing_start, existing_end, requested_time
+                )
+                Appointment.objects.all().delete()
+                Parent.objects.all().delete()
+                EmailOutbox.objects.all().delete()
+
+    def test_parent_overlap_matches_case_insensitive_trimmed_email(self):
+        starts_at = local_datetime_to_utc(
+            datetime.combine(self.booking_date, time(17)), "Asia/Kolkata"
+        )
+        self.add_appointment(
+            self.mentor, starts_at, "parent-email-normalized",
+            parent_email="Casey@example.com",
+        )
+        payload = {
+            **self.parent_data,
+            "email": "  casey@EXAMPLE.com  ",
+            "selected_time": "17:00",
+        }
+        response = api_post(
+            APIClient(), "/api/bookings/", payload, format="json",
+            HTTP_IDEMPOTENCY_KEY="parent-email-casefold",
+        )
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(Appointment.objects.count(), 1)
+        self.assertEqual(EmailOutbox.objects.count(), 0)
+
+    def test_same_parent_can_book_adjacent_and_other_non_overlapping_times(self):
+        self.add_mentor("Ananya Mentor", "ananya.mentor@gmail.com")
+        starts_at = local_datetime_to_utc(
+            datetime.combine(self.booking_date, time(17)), "Asia/Kolkata"
+        )
+        existing = self.add_appointment(
+            self.mentor, starts_at, "parent-adjacent-existing",
+            parent_email=self.parent_data["email"],
+        )
+        client = APIClient()
+        adjacent_payload = {
+            **self.parent_data,
+            "selected_time": "17:30",
+        }
+        adjacent = api_post(
+            client, "/api/bookings/", adjacent_payload, format="json",
+            HTTP_IDEMPOTENCY_KEY="parent-adjacent-allowed",
+        )
+        self.assertEqual(adjacent.status_code, 201, adjacent.content)
+        self.assertEqual(adjacent.data["parent"]["email"], self.parent_data["email"])
+
+        later_payload = {**self.parent_data, "selected_time": "18:00"}
+        later = api_post(
+            client, "/api/bookings/", later_payload, format="json",
+            HTTP_IDEMPOTENCY_KEY="parent-later-allowed",
+        )
+        self.assertEqual(later.status_code, 201, later.content)
+        self.assertEqual(Appointment.objects.filter(parent=existing.parent).count(), 3)
+        self.assertEqual(EmailOutbox.objects.count(), 4)
+
+    def test_different_parent_can_book_same_time_when_another_mentor_is_available(self):
+        other_mentor = self.add_mentor("Ananya Mentor", "ananya.mentor@gmail.com")
+        starts_at = local_datetime_to_utc(
+            datetime.combine(self.booking_date, time(17)), "Asia/Kolkata"
+        )
+        self.add_appointment(self.mentor, starts_at, "other-parent-slot")
+        payload = {
+            **self.parent_data,
+            "email": "another-parent@example.com",
+            "selected_time": "17:00",
+        }
+        response = api_post(
+            APIClient(), "/api/bookings/", payload, format="json",
+            HTTP_IDEMPOTENCY_KEY="different-parent-same-time",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.data["mentor"]["email"], other_mentor.email)
+        self.assertEqual(Appointment.objects.count(), 2)
+        self.assertEqual(EmailOutbox.objects.count(), 2)
 
     def test_idempotency_returns_original_booking_without_duplicate_outbox_or_parent_email(self):
         mail.outbox.clear()
@@ -284,6 +409,35 @@ class BookingWorkflowTests(TransactionTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Appointment.objects.count(), 0)
 
+    def test_demo_video_unlocks_before_at_and_after_scheduled_utc_start(self):
+        appointment, _ = create_booking(self.parent_data, "demo-time-gate")
+        meeting_id = appointment.meeting_link.rsplit("/", 1)[-1]
+        client = APIClient()
+        video_url = settings.DEMO_CLASS_VIDEO_URL
+
+        with patch(
+            "bookings.api.views.timezone.now",
+            return_value=appointment.start_time_utc - timedelta(microseconds=1),
+        ):
+            before = api_get(client, f"/api/demo-classes/{meeting_id}/")
+        self.assertEqual(before.status_code, 200)
+        self.assertFalse(before.data["access_available"])
+        self.assertNotIn("video_url", before.data)
+        self.assertNotIn(video_url, str(before.data))
+
+        with patch("bookings.api.views.timezone.now", return_value=appointment.start_time_utc):
+            at_start = api_get(client, f"/api/demo-classes/{meeting_id}/")
+        self.assertTrue(at_start.data["access_available"])
+        self.assertEqual(at_start.data["video_url"], video_url)
+
+        with patch(
+            "bookings.api.views.timezone.now",
+            return_value=appointment.start_time_utc + timedelta(microseconds=1),
+        ):
+            after = api_get(client, f"/api/demo-classes/{meeting_id}/")
+        self.assertTrue(after.data["access_available"])
+        self.assertEqual(after.data["video_url"], video_url)
+
     def test_nithin_new_york_to_mangalore_end_to_end_booking(self):
         booking_date = next_future_edt_weekday()
         expected_utc = datetime.combine(booking_date, time(12), tzinfo=timezone.utc)
@@ -323,6 +477,9 @@ class BookingWorkflowTests(TransactionTestCase):
         self.assertEqual(demo_class.data["mentor"]["local_time"], "5:30 PM IST")
         self.assertEqual(demo_class.data["parent_time"]["local_time"], "8:00 AM EDT")
         self.assertNotIn("email", demo_class.data)
+        self.assertFalse(demo_class.data["access_available"])
+        self.assertNotIn("video_url", demo_class.data)
+        self.assertNotIn(settings.DEMO_CLASS_VIDEO_URL, str(demo_class.data))
         self.assertEqual(api_get(client, "/api/demo-classes/not-a-meeting/").status_code, 404)
         self.assertEqual(appointment.start_time_utc, expected_utc)
         self.assertEqual(appointment.mentor.email, self.mentor.email)
@@ -340,6 +497,8 @@ class BookingWorkflowTests(TransactionTestCase):
         self.assertEqual(mentor_mail.appointment_id, appointment.pk)
         self.assertIn(appointment.meeting_link, parent_mail.body)
         self.assertIn(appointment.meeting_link, mentor_mail.body)
+        self.assertNotIn(settings.DEMO_CLASS_VIDEO_URL, parent_mail.body)
+        self.assertNotIn(settings.DEMO_CLASS_VIDEO_URL, mentor_mail.body)
         parent_local_date = appointment.start_time_utc.astimezone(ZoneInfo("America/New_York")).strftime("%A, %B %d, %Y")
         mentor_local_date = appointment.start_time_utc.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%A, %B %d, %Y")
         self.assertIn(parent_local_date, parent_mail.body)
@@ -497,6 +656,42 @@ class SeededMentorCapacityTests(TransactionTestCase):
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 class ConcurrentBookingTests(TransactionTestCase):
     reset_sequences = True
+
+    def test_concurrent_overlapping_requests_from_same_parent_only_create_one_booking(self):
+        booking_date = date.today() + timedelta(days=3)
+        mentor = Mentor.objects.create(
+            name="Only Mentor", email="only.mentor@gmail.com",
+            continent="Asia", country="India", state_region="Karnataka", city="Mangalore",
+            timezone="Asia/Kolkata",
+            working_hours={str(day): {"start": "09:00", "end": "22:00"} for day in range(1, 8)},
+        )
+        barrier = Barrier(2)
+
+        def attempt(number):
+            close_old_connections()
+            data = {
+                "name": f"Same Parent {number}", "email": "same-parent@example.com",
+                "continent": "Asia", "country": "India", "state_region": "Karnataka",
+                "city": "Mangalore", "timezone": "Asia/Kolkata",
+                "selected_date": booking_date, "selected_time": time(17),
+            }
+            try:
+                barrier.wait(timeout=10)
+                appointment, created = create_booking(data, f"same-parent-concurrent-{number}")
+                return ("created", appointment.pk) if created else ("replayed", appointment.pk)
+            except ParentOverlapConflict:
+                return ("overlap", None)
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(attempt, (1, 2)))
+
+        self.assertEqual(sum(result[0] == "created" for result in results), 1)
+        self.assertEqual(sum(result[0] == "overlap" for result in results), 1)
+        self.assertEqual(Appointment.objects.filter(mentor=mentor).count(), 1)
+        self.assertEqual(Parent.objects.filter(email__iexact="same-parent@example.com").count(), 1)
+        self.assertEqual(EmailOutbox.objects.count(), 2)
 
     def test_only_one_parent_gets_last_mentor_for_overlapping_slot(self):
         booking_date = date.today() + timedelta(days=3)

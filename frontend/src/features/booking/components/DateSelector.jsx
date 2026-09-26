@@ -14,30 +14,8 @@ export function formatSelectedDate(value) {
 }
 
 export default function DateSelector({ value, onChange, timezone }) {
-  return (
-    <div className="date-picker-panel">
-      <div className="section-heading compact-heading">
-        <span className="step-kicker">STEP 02 · PICK A DAY</span>
-        <h2>Find a time that works.</h2>
-        <p>Choose a date and we’ll show class times in your timezone.</p>
-      </div>
-      <div className="field-group date-field">
-        <label htmlFor="booking-date">Trial class date</label>
-        <input id="booking-date" type="date" min={localToday(timezone)} value={value}
-          onChange={(event) => onChange(event.target.value)} required />
-      </div>
-      {value && (
-        <div className="date-preview">
-          <span className="date-preview-icon" aria-hidden="true">◷</span>
-          <span><strong>{formatSelectedDate(value)}</strong><small>Shown in {timezone}</small></span>
-        </div>
-      )}
-      <div className="form-actions date-actions">
-        <span className="privacy-note">30-minute complimentary class</span>
-        <button className="button button-primary" type="submit" disabled={!value}>
-          See available times <span aria-hidden="true">→</span>
-        </button>
-      </div>
-    </div>
-  )
+  return <div className="date-picker-panel">
+    <div className="field-group date-field"><label htmlFor="booking-date">Choose a class date</label><input id="booking-date" type="date" min={localToday(timezone)} value={value} onChange={(event) => onChange(event.target.value)} required /><span className="field-hint">Dates are based on your local calendar in {timezone}.</span></div>
+    {value && <div className="date-preview"><span className="date-preview-icon" aria-hidden="true">◷</span><span><strong>{formatSelectedDate(value)}</strong><small>Shown in {timezone}</small></span></div>}
+  </div>
 }

@@ -15,7 +15,9 @@ async function request(path, options = {}) {
     const detail = payload?.detail
       ?? Object.values(payload ?? {}).flatMap((value) => Array.isArray(value) ? value : [value]).join(' ')
       ?? `Request failed (${response.status})`
-    throw new Error(typeof detail === 'string' ? detail : `Request failed (${response.status})`)
+    const error = new Error(typeof detail === 'string' ? detail : `Request failed (${response.status})`)
+    error.status = response.status
+    throw error
   }
   return payload
 }
@@ -57,3 +59,21 @@ export const createSupportCallback = (requestData) => request('/api/support/call
   method: 'POST',
   body: JSON.stringify(requestData),
 })
+
+export async function loginUser({ email, password, remember }) {
+  const csrf = await request('/api/auth/csrf/')
+  return request('/api/auth/login/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': csrf.csrfToken },
+    body: JSON.stringify({ email, password, remember }),
+  })
+}
+
+export async function requestPasswordReset(email) {
+  const csrf = await request('/api/auth/csrf/')
+  return request('/api/auth/password-reset/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': csrf.csrfToken },
+    body: JSON.stringify({ email }),
+  })
+}

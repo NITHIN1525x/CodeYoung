@@ -6,7 +6,6 @@ import LoadingState from './components/LoadingState.jsx'
 export default function DemoClassPage({ meetingId }) {
   const [details, setDetails] = useState(null)
   const [error, setError] = useState('')
-  const [entered, setEntered] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -18,7 +17,19 @@ export default function DemoClassPage({ meetingId }) {
     return () => controller.abort()
   }, [meetingId])
 
-  const startClass = () => setEntered(true)
+  useEffect(() => {
+    if (!details || details.access_available) return undefined
+    const controller = new AbortController()
+    const interval = window.setInterval(() => {
+      getDemoClass(meetingId, { signal: controller.signal })
+        .then(setDetails)
+        .catch(() => {})
+    }, 15000)
+    return () => {
+      controller.abort()
+      window.clearInterval(interval)
+    }
+  }, [details, meetingId])
   return (
     <main className="demo-class-page">
       <nav className="topbar" aria-label="Main navigation">
@@ -32,7 +43,7 @@ export default function DemoClassPage({ meetingId }) {
           <span className="demo-class-icon" aria-hidden="true">✦</span>
           <p className="step-kicker">CODEYOUNG TRIAL CLASS</p>
           <h1>Demo Class</h1>
-          <p className="demo-class-notice">This is a demo meeting. No video or microphone connection is required.</p>
+          <p className="demo-class-notice">This is a demo meeting. Your appointment details are shown in your local time and your mentor’s local time.</p>
           <div className="demo-class-details">
             <div><span>Mentor</span><strong>{details.mentor.name}</strong>
               {details.mentor.location && <small>{details.mentor.location.city === 'Not specified'
@@ -43,9 +54,12 @@ export default function DemoClassPage({ meetingId }) {
             <div><span>Mentor’s local date and time</span><strong>{details.mentor.local_date}</strong><strong>{details.mentor.local_time}</strong><small>{details.mentor.timezone}</small></div>
             <div><span>Class length</span><strong>{details.duration_minutes} minutes</strong></div>
           </div>
-          {!entered
-            ? <button className="button button-primary demo-enter-button" type="button" onClick={startClass}>Enter Demo Class <span aria-hidden="true">→</span></button>
-            : <p className="demo-entered-message" role="status">You’ve entered the demo class. This demo meeting is ready.</p>}
+          {details.access_available
+            ? <>
+                <p className="demo-entered-message" role="status">Your demo class is ready. The video opens in a new tab.</p>
+                <a className="button button-primary demo-enter-button" href={details.video_url} target="_blank" rel="noopener noreferrer">Open Demo Class Video <span aria-hidden="true">↗</span></a>
+              </>
+            : <p className="demo-locked-message" role="status">Your demo video is locked until your scheduled start time: {details.parent_time.local_date} at {details.parent_time.local_time}. This page will check again automatically.</p>}
         </>}
       </section>
     </main>

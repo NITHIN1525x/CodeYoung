@@ -78,7 +78,7 @@ export default function FloatingAssistant() {
 
   const runAction = (action, question) => {
     if (action === 'call') setMode('call')
-    else if (action === 'book') window.location.assign('/')
+    else if (action === 'book') window.location.assign('/register')
     else if (action === 'question') send(question)
   }
 

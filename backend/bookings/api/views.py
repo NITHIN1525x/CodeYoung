@@ -1,6 +1,6 @@
 from django.conf import settings
-
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
@@ -12,6 +12,7 @@ from bookings.services.creation import (
     BookingValidationError,
     IdempotencyConflict,
     NoAvailableMentor,
+    ParentOverlapConflict,
     create_booking,
     serialize_booking,
 )
@@ -51,6 +52,8 @@ def create_booking_view(request):
     except BookingValidationError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     except NoAvailableMentor as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    except ParentOverlapConflict as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
     return Response(serialize_booking(appointment), status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
@@ -179,9 +182,13 @@ def demo_class_view(request, meeting_id):
 
     parent_local = utc_to_local(appointment.start_time_utc, appointment.parent.timezone)
     mentor_local = utc_to_local(appointment.start_time_utc, appointment.mentor.timezone)
-    return Response({
+    now_utc = timezone.now()
+    access_available = now_utc >= appointment.start_time_utc
+    response_data = {
         "meeting_id": meeting_id,
         "status": appointment.status,
+        "start_time_utc": appointment.start_time_utc.isoformat(),
+        "access_available": access_available,
         "duration_minutes": int((appointment.end_time_utc - appointment.start_time_utc).total_seconds() // 60),
         "mentor": {
             "name": appointment.mentor.name,
@@ -210,4 +217,7 @@ def demo_class_view(request, meeting_id):
             "local_date": parent_local.strftime("%A, %B %d, %Y"),
             "local_time": format_local_datetime(appointment.start_time_utc, appointment.parent.timezone),
         },
-    })
+    }
+    if access_available:
+        response_data["video_url"] = settings.DEMO_CLASS_VIDEO_URL
+    return Response(response_data)

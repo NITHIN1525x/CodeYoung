@@ -38,6 +38,15 @@ class NoAvailableMentor(Exception):
     """No mentor can take the requested slot."""
 
 
+class ParentOverlapConflict(Exception):
+    """The parent already has an appointment that overlaps this slot."""
+
+
+PARENT_OVERLAP_MESSAGE = (
+    "You already have a trial class scheduled during this time. Please choose another time."
+)
+
+
 def _validate_parent(data: dict) -> dict:
     required = ("name", "email", "continent", "country", "state_region", "city", "timezone")
     cleaned = {}
@@ -169,6 +178,18 @@ def create_booking(data: dict, idempotency_key: str) -> tuple[Appointment, bool]
             return existing, False
         if start_utc <= datetime.now(UTC):
             raise BookingValidationError("The selected appointment time is in the past.")
+
+        # Every booking transaction locks active mentor rows in stable order above.
+        # The overlap check runs under those same locks so simultaneous requests
+        # for one parent cannot both pass before either appointment is committed.
+        parent_overlap = Appointment.objects.filter(
+            parent__email__iexact=parent_data["email"].strip(),
+            status__in=ACTIVE_APPOINTMENT_STATUSES,
+            start_time_utc__lt=end_utc,
+            end_time_utc__gt=start_utc,
+        ).exists()
+        if parent_overlap:
+            raise ParentOverlapConflict(PARENT_OVERLAP_MESSAGE)
 
         eligible = []
         for mentor in mentors:
