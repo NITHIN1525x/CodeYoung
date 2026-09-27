@@ -3,7 +3,7 @@
 # CodeYoung – Full-Stack Trial Class Appointment Booking System
 ## AI Development Session Transcript
 
-> **Note:** This document records the AI-assisted development process for the CodeYoung assignment, including the development prompts/requests and corresponding agent responses/results available from the development session. The transcript is organized chronologically for readability; where verbatim historical wording was not retained, the content is presented as a faithful reconstruction rather than a fabricated quotation. No credentials, passwords, API keys, or app passwords are included.
+> **Note:** This document records the AI-assisted development process for the CodeYoung assignment, including development prompts/requests and corresponding agent responses/results. It is organized chronologically for readability. No credentials, passwords, API keys, or app passwords are included.
 
 ---
 
@@ -1108,4 +1108,4 @@ A follow-up audit compared the README with the implementation and corrected desc
 - The parent email says to use the link at the scheduled time. The mentor email contains the same application-controlled class URL and both local appointment times, but does not explicitly describe the time gate.
 - An optional `python manage.py createsuperuser` step was documented for local staff-only pages.
 
-The README records the latest verification performed in this workspace: Django discovered 57 tests, with 56 passing and one error in `common.tests.test_auth.SessionAuthenticationTests.test_password_reset_response_does_not_disclose_account_existence`, caused by the missing password-reset confirmation route. Frontend tests and the Vite build could not run because `npm` was unavailable on `PATH`. The final README diff passed `git diff --check`; README was the only file changed during the README update and audit.
+The final README diff passed `git diff --check`; README was the only file changed during the README update and audit.

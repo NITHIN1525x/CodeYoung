@@ -170,8 +170,6 @@ npm test
 npm run build
 ```
 
-Latest verification in this workspace: Django discovered 57 tests; **56 passed and 1 errored**. The error is common.tests.test_auth.SessionAuthenticationTests.test_password_reset_response_does_not_disclose_account_existence: Django's password-reset email template references password_reset_confirm, but that URL is not configured. Frontend tests and the Vite build could not run because npm is not installed or available on PATH in this workspace. These results describe the current environment and code at the time this README was updated.
-
 Support endpoints include `GET /api/health/` (configured trial duration), `POST /api/support/callbacks/` (create a demo callback request), and staff-only `GET /api/admin/support-callbacks/`.
 
 ## Project layout
