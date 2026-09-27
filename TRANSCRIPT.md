@@ -1076,3 +1076,37 @@ Credentials not stored in source code
 - The dummy class link is implemented as a working frontend route.
 - Email credentials are kept outside source code.
 - `.env` is not committed to GitHub.
+
+---
+
+# Part 15 — README Documentation Update
+
+## User Prompt
+
+Update the existing README so it accurately documents the current CodeYoung project.
+
+Requirements included:
+
+- Preserve the existing setup/run instructions and keep a single setup section.
+- Inspect the current repository and README before making changes.
+- Document the local PostgreSQL setup; do not add Docker or submission instructions.
+- Do not include secrets or credentials.
+- Document only behavior present in the project: the landing and login flows; parent details; automatic/manual location and IANA timezone selection; date/time selection; availability and automatic mentor assignment; validation; appointment creation; parent and mentor email/outbox; confirmation; and the application-controlled `/class/<meeting_id>` route with its UTC time gate and demo video.
+- Describe the shared UTC/timezone architecture, mentor-local daily capacity of two, normalized-email parent overlap checks over UTC intervals, HTTP 409 behavior, idempotency, and PostgreSQL concurrency protection.
+- Document the mentor and staff dashboards, support chatbot, callback request, security/privacy, architecture, and tests only as implemented and verified.
+- Verify authentication and password reset, class access and Drive destination behavior, and parent-overlap side effects/concurrency before describing them.
+- Inspect the final diff and confirm only the README changed.
+
+## Codex Response / Result
+
+The initial ordinary workspace command failed before running because the sandbox could not initialize (`mountinfo path is not absolute`). An approved elevated path was then used to inspect and update the README. The existing local PostgreSQL setup/run section was preserved; documentation was added for the current workflow, timezone and availability architecture, seeded mentors and capacity, overlap/idempotency/concurrency behavior, email/outbox, class access, support features, dashboards, environment configuration, and architecture.
+
+A follow-up audit compared the README with the implementation and corrected descriptions that otherwise would have overstated behavior:
+
+- Password reset has a page and endpoint, but requests for an existing account currently error because the email template references an unconfigured `password_reset_confirm` route.
+- The class API returns 404 for malformed or unknown IDs. The frontend only mounts the class page for a 32-character hexadecimal ID; malformed browser paths fall back to the landing page.
+- Parent overlap validation is performed during booking confirmation; the availability preview does not have the parent's email with which to check it.
+- The parent email says to use the link at the scheduled time. The mentor email contains the same application-controlled class URL and both local appointment times, but does not explicitly describe the time gate.
+- An optional `python manage.py createsuperuser` step was documented for local staff-only pages.
+
+The README records the latest verification performed in this workspace: Django discovered 57 tests, with 56 passing and one error in `common.tests.test_auth.SessionAuthenticationTests.test_password_reset_response_does_not_disclose_account_existence`, caused by the missing password-reset confirmation route. Frontend tests and the Vite build could not run because `npm` was unavailable on `PATH`. The final README diff passed `git diff --check`; README was the only file changed during the README update and audit.
