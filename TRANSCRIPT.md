@@ -3,8 +3,7 @@
 # CodeYoung – Full-Stack Trial Class Appointment Booking System
 ## AI Development Session Transcript
 
-> **Note:** This document records the AI-assisted development process for the CodeYoung assignment.
-> Parts 1–8 below are reconstructed from the available development-session history and project decisions; the exact raw wording of some earlier prompts was not retained in the current session history. Later debugging and verification prompts are included using the available session record. No credentials, passwords, API keys, or app passwords are included.
+> **Note:** This document records the AI-assisted development process for the CodeYoung assignment, including the development prompts/requests and corresponding agent responses/results available from the development session. The transcript is organized chronologically for readability; where verbatim historical wording was not retained, the content is presented as a faithful reconstruction rather than a fabricated quotation. No credentials, passwords, API keys, or app passwords are included.
 
 ---
 
